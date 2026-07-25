@@ -7,7 +7,7 @@ Fast submitter with keyboard shortcuts for VNOJ, Atcoder, CSES, SPOJ
 
 # How to download
 
-> You need to download (Tampermoney)[https://www.tampermonkey.net/] or similiar tools to be able to use this script
+> You need to download [Tampermoney](https://www.tampermonkey.net/) or similiar tools to be able to use this script
 
 There are 2 ways you can do:
 1. Go to [source file](CSES-VNOI-AtCoder-SPOJ_fast_submitter.user.js) and view it in raw mode. A Tampermonkey script installation request will be prompted.
