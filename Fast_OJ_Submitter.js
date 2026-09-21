@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Fast Universal OJ Submitter
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @license      MIT
-// @description  Instant Direct POST for DMOJ & SPOJ; Fast UI Injection for AtCoder & MarisaOJ.
+// @description  Fast submitter using direct POST and UI Injection in Codeforces, DMOJ forks, SPOJ, Atcoder, CSES, MarisaOJ
 // @author       TomDev
 // @match        https://cses.fi/problemset/*
 // @match        https://oj.vnoi.info/problem/*
@@ -18,6 +18,12 @@
 // @match        https://oj.iuhcoder.com/submit/*
 // @match        https://oj.giftedbat.edu.vn/problem/*
 // @match        https://oj.giftedbat.edu.vn/submit/*
+// @match        https://codeforces.com/contest/*/problem/*
+// @match        https://codeforces.com/contest/*/submit*
+// @match        https://codeforces.com/problemset/problem/*
+// @match        https://codeforces.com/problemset/submit*
+// @match        https://codeforces.com/gym/*/problem/*
+// @match        https://codeforces.com/gym/*/submit*
 // @grant        unsafeWindow
 // @run-at       document-end
 // ==/UserScript==
@@ -26,71 +32,95 @@
     'use strict';
 
     // =========================================================================
-    // 1. CẤU HÌNH OJ & NGÔN NGỮ MẶC ĐỊNH
+    // 1. OJ REGISTRY & DEFAULT CONFIGURATION
     // =========================================================================
     const OJ_REGISTRY = [
-        // --- Nhóm Direct POST: DMOJ Forks (Chỉnh lang theo từng web) ---
+        // --- Direct POST Group: DMOJ Forks ---
         {
             name: 'VNOI',
             type: 'dmoj_post',
             match: /oj\.vnoi\.info\/problem\/([^/?#]+)/,
-            getSubmitUrl: (m) => `https://oj.vnoi.info/problem/${m[1]}/submit`,
-            lang: 'C++17' // hoặc 'C++20'
+ getSubmitUrl: (m) => `https://oj.vnoi.info/problem/${m[1]}/submit`,
+ lang: 'C++17'
         },
         {
             name: 'IUHCoder',
             type: 'dmoj_post',
             match: /oj\.iuhcoder\.com\/problem\/([^/?#]+)/,
-            getSubmitUrl: (m) => `https://oj.iuhcoder.com/problem/${m[1]}/submit`,
-            lang: 'CPP17' // hoặc 'CPP14'
+ getSubmitUrl: (m) => `https://oj.iuhcoder.com/problem/${m[1]}/submit`,
+ lang: 'CPP17'
         },
         {
             name: 'GiftedBat',
             type: 'dmoj_post',
             match: /oj\.giftedbat\.edu\.vn\/problem\/([^/?#]+)/,
-            getSubmitUrl: (m) => `https://oj.giftedbat.edu.vn/problem/${m[1]}/submit`,
-            lang: 'CPP17'
+ getSubmitUrl: (m) => `https://oj.giftedbat.edu.vn/problem/${m[1]}/submit`,
+ lang: 'CPP17'
         },
 
-        // --- Nhóm Direct POST: SPOJ ---
+        // --- Direct POST Group: SPOJ ---
         {
             name: 'SPOJ',
             type: 'spoj_post',
             match: /spoj\.com\/(?:problems|submit)\/([^/?#]+)/,
-            getSubmitUrl: () => `${window.location.origin}/submit/complete/`,
-            langId: 44 // 44 = C++14/17 (gcc), 113 = C++20, 116 = Python 3
+ getSubmitUrl: () => `${window.location.origin}/submit/complete/`,
+ langId: 44 // 44 = C++14/17 (gcc), 113 = C++20
         },
 
-        // --- Nhóm Direct POST: CSES ---
+        // --- Direct POST Group: CSES ---
         {
             name: 'CSES',
             type: 'cses_post',
             match: /cses\.fi\/problemset\/(task|submit)\/(\d+)/,
-            getSubmitUrl: (m) => `https://cses.fi/problemset/submit/${m[2]}/`
+ getSubmitUrl: (m) => `https://cses.fi/problemset/submit/${m[2]}/`
         },
 
-        // --- Nhóm UI Simulation: MarisaOJ (SPA) ---
+        // --- UI Simulation Group: MarisaOJ (SPA) ---
         {
             name: 'MarisaOJ',
             type: 'ui_simulation',
             match: /marisaoj\.com\/(problem|submit)\/(\d+)/,
-            getSubmitUrl: (m) => `https://marisaoj.com/submit/${m[2]}`
+ getSubmitUrl: (m) => `https://marisaoj.com/submit/${m[2]}`
         },
 
-        // --- Nhóm UI Simulation: AtCoder (Cloudflare Turnstile) ---
+        // --- UI Simulation Group: AtCoder (Cloudflare Turnstile) ---
         {
             name: 'AtCoder',
             type: 'ui_simulation',
             match: /atcoder\.jp\/contests\/([^/]+)\/(tasks|submit)(\/([^/?]+))?/,
-            getSubmitUrl: (m, url) => {
-                const task = m[4] || new URL(url).searchParams.get('taskScreenName');
-                return `https://atcoder.jp/contests/${m[1]}/submit${task ? '?taskScreenName=' + task : ''}`;
-            }
+ getSubmitUrl: (m, url) => {
+     const task = m[4] || new URL(url).searchParams.get('taskScreenName');
+     return `https://atcoder.jp/contests/${m[1]}/submit${task ? '?taskScreenName=' + task : ''}`;
+ }
+        },
+
+        // --- UI Simulation Group: Codeforces ---
+        {
+            name: 'Codeforces',
+            type: 'codeforces_simulation',
+            match: /codeforces\.com\/(?:contest|gym)\/(\d+)\/(?:problem|submit)(?:\/([A-Za-z0-9_]+))?|codeforces\.com\/problemset\/(?:problem\/(\d+)\/([A-Za-z0-9_]+)|submit)/,
+ resolve: (m, currentUrl) => {
+     let contestId = m[1] || m[3];
+     let problemIndex = m[2] || m[4];
+     const isGym = currentUrl.includes('/gym/');
+     const isProblemset = currentUrl.includes('/problemset/');
+
+     let submitUrl = '';
+     if (isGym) {
+         submitUrl = `https://codeforces.com/gym/${contestId}/submit`;
+     } else if (isProblemset) {
+         submitUrl = 'https://codeforces.com/problemset/submit';
+     } else {
+         submitUrl = `https://codeforces.com/contest/${contestId}/submit`;
+     }
+
+     return { submitUrl, contestId, problemIndex };
+ }
         }
     ];
 
     // =========================================================================
-    // 2. DIRECT POST ENGINES
+    // 2. DIRECT POST & API ENGINES
     // =========================================================================
     function submitDMOJDirectly(submitUrl, code, defaultLang) {
         let csrfToken = document.cookie.match(/csrftoken=([^;]+)/)?.[1] || '';
@@ -106,8 +136,8 @@
 
         const fields = {
             'csrfmiddlewaretoken': csrfToken,
-            'language': language,
-            'source': code
+ 'language': language,
+ 'source': code
         };
 
         for (const [k, v] of Object.entries(fields)) {
@@ -129,9 +159,9 @@
 
         const fields = {
             'problemcode': problemCode,
-            'lang': langId || 44,
-            'file': code,
-            'subpage': 'problems'
+ 'lang': langId || 44,
+ 'file': code,
+ 'subpage': 'problems'
         };
 
         for (const [k, v] of Object.entries(fields)) {
@@ -179,7 +209,7 @@
     // 3. UI INJECTION ENGINE
     // =========================================================================
     function syncHiddenInputs(code) {
-        const els = document.querySelectorAll('textarea[name="source"], textarea[name="code"], textarea[name="solution"], #sourceCode, textarea[name="sourcefile"], input[name="source"]');
+        const els = document.querySelectorAll('textarea[name="source"], textarea[name="code"], textarea[name="solution"], #sourceCode, textarea[name="sourcefile"], input[name="source"], #sourceCodeTextarea');
         els.forEach(el => {
             el.value = code;
             el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -200,7 +230,7 @@
             } catch (e) {}
         }
 
-        // Ace Editor (AtCoder)
+        // Ace Editor (AtCoder, Codeforces Ace wrapper)
         if (unsafeWindow.ace) {
             try {
                 const el = document.querySelector('.ace_editor') || document.getElementById('editor');
@@ -238,7 +268,7 @@
         }
 
         // Plain Textarea
-        const ta = document.querySelector('#sourceCode, textarea[name="source"], textarea[name="code"], textarea[name="solution"], #editor textarea');
+        const ta = document.querySelector('#sourceCode, #sourceCodeTextarea, textarea[name="source"], textarea[name="code"], textarea[name="solution"], #editor textarea');
         if (ta && ta.offsetParent !== null) {
             ta.value = code;
             ta.dispatchEvent(new Event('input', { bubbles: true }));
@@ -257,13 +287,15 @@
 
     function triggerSubmitButton() {
         const selectors = [
-            '#submit',
-            'button[type="submit"]',
-            'input[type="submit"]',
-            'button.btn-submit',
-            'button[id*="submit"]',
-            'form#submit-form button',
-            'form input[type="submit"]'
+            '#singlePageSubmitButton',
+ 'form.submitForm input[type="submit"]',
+ 'form#submit-form input[type="submit"]',
+ '#submit',
+ 'button[type="submit"]',
+ 'input[type="submit"]',
+ 'button.btn-submit',
+ 'button[id*="submit"]',
+ 'form#submit-form button'
         ];
 
         for (const sel of selectors) {
@@ -275,9 +307,23 @@
         }
     }
 
-    function executeUISubmission(code) {
+    function executeUISubmission(code, targetProblemIndex) {
         let attempts = 0;
         const maxAttempts = 40;
+
+        if (targetProblemIndex) {
+            const probSelect = document.querySelector('select[name="submittedProblemIndex"], select[name="submittedProblemCode"]');
+            if (probSelect) {
+                for (let i = 0; i < probSelect.options.length; i++) {
+                    if (probSelect.options[i].value.toUpperCase() === targetProblemIndex.toUpperCase() ||
+                        probSelect.options[i].text.toUpperCase().startsWith(targetProblemIndex.toUpperCase())) {
+                        probSelect.selectedIndex = i;
+                    probSelect.dispatchEvent(new Event('change', { bubbles: true }));
+                    break;
+                        }
+                }
+            }
+        }
 
         const fillTimer = setInterval(() => {
             attempts++;
@@ -305,29 +351,45 @@
         for (const target of OJ_REGISTRY) {
             const match = currentUrl.match(target.match);
             if (match) {
-                const submitUrl = target.getSubmitUrl(match, currentUrl);
-
                 if (target.type === 'dmoj_post') {
+                    const submitUrl = target.getSubmitUrl(match, currentUrl);
                     submitDMOJDirectly(submitUrl, code, target.lang);
                     return;
                 }
 
                 if (target.type === 'spoj_post') {
+                    const submitUrl = target.getSubmitUrl(match, currentUrl);
                     submitSPOJDirectly(submitUrl, match[1], code, target.langId);
                     return;
                 }
 
                 if (target.type === 'cses_post') {
+                    const submitUrl = target.getSubmitUrl(match, currentUrl);
                     submitCSESDirectly(submitUrl, code);
                     return;
                 }
 
                 if (target.type === 'ui_simulation') {
+                    const submitUrl = target.getSubmitUrl(match, currentUrl);
                     if (submitUrl !== currentUrl && !currentUrl.includes('/submit')) {
                         sessionStorage.setItem('oj_autosubmit_code', code);
                         window.location.href = submitUrl;
                     } else {
                         executeUISubmission(code);
+                    }
+                    return;
+                }
+
+                if (target.type === 'codeforces_simulation') {
+                    const { submitUrl, problemIndex } = target.resolve(match, currentUrl);
+                    if (!currentUrl.includes('/submit')) {
+                        sessionStorage.setItem('oj_autosubmit_code', code);
+                        if (problemIndex) {
+                            sessionStorage.setItem('oj_autosubmit_cf_problem', problemIndex);
+                        }
+                        window.location.href = submitUrl;
+                    } else {
+                        executeUISubmission(code, problemIndex);
                     }
                     return;
                 }
@@ -344,7 +406,7 @@
                 const text = await navigator.clipboard.readText();
                 if (text?.trim()) handleSubmission(text);
             } catch (err) {
-                console.warn("[AutoSubmit] Không đọc được Clipboard:", err);
+                console.warn("[AutoSubmit] Unable to read clipboard:", err);
             }
         }
 
@@ -367,6 +429,9 @@
     const savedCode = sessionStorage.getItem('oj_autosubmit_code');
     if (savedCode) {
         sessionStorage.removeItem('oj_autosubmit_code');
-        setTimeout(() => executeUISubmission(savedCode), 200);
+        const savedProblem = sessionStorage.getItem('oj_autosubmit_cf_problem');
+        if (savedProblem) sessionStorage.removeItem('oj_autosubmit_cf_problem');
+
+        setTimeout(() => executeUISubmission(savedCode, savedProblem), 300);
     }
 })();
