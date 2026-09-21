@@ -7,7 +7,7 @@ Currently support OJs: [Codeforces](https://codeforces.com/), [DMOJ](https://dmo
 - `Ctrl/Cmd + S`: submit clipboard (must be on problem page)
 - `Alt/Opt + S`: submit file (must be on problem page)
 
-* Disclaimer: On firefox, if the userscript doesn't work or it showing the `paste` button. Go to `about:config` and change:
+**Disclaimer:** On firefox, if the userscript doesn't work or it showing the `paste` button. Go to `about:config` and change:
 - `dom.events.asyncClipboard.readText` = true
 - `dom.events.testing.asyncClipboard` = true
 
